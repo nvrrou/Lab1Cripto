@@ -1,24 +1,82 @@
-from scapy.all import IP, ICMP, send, Raw
+from scapy.all import IP, ICMP, Raw, send
+import struct
+import time
+import os
 
 destino = input("IP de destino: ")
-mensaje = input("Mensaje: ")
+mensaje = input("Mensaje cifrado: ")
 
-cantidad = len(mensaje)
+icmp_id = os.getpid() & 0xffff
+ip_id = int(time.time()) & 0xffff
 
-#Pasamos la data de un ping normal a ASCII
-hexadecimal = "101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323334353637"
+# 10 11 12 ... 37
+padding = bytes(range(0x10, 0x38))
 
-datos = bytes.fromhex(hexadecimal)
+for i, caracter in enumerate(mensaje):
 
-for i in range(cantidad):
-    #encriptamo el icmp, y le añadimos los datos, uwu
-    paquete = IP(dst=destino) / ICMP() / Raw(load=mensaje[i].encode()) / datos
+    ahora = time.time()
 
-    print(
-        f"Enviando paquete {i + 1}/{cantidad}: "
-        f"{paquete.summary()}"
+    segundos = int(ahora)
+    microsegundos = int(
+        (ahora - segundos) * 1_000_000
     )
 
-    send(paquete, verbose=False)
+    # 8 bytes de timestamp
+    timestamp = (
+        struct.pack("!I", segundos & 0xffffffff)
+        + b"\x00" * 4
+    )
+
+    micro = microsegundos.to_bytes(
+        3,
+        byteorder="little"
+    )
+
+    # 3 bytes:
+    # [letra][2 bytes relacionados al tiempo]
+    datos_3 = (
+        caracter.encode("ascii")
+        + micro[1:3]
+    )
+
+    # 5 bytes 00
+    ceros = b"\x00" * 5
+
+    # 8 + 3 + 5 + 40 = 56 bytes
+    payload = (
+        timestamp
+        + datos_3
+        + ceros
+        + padding
+    )
+
+    paquete = (
+        IP(
+            dst=destino,
+            ttl=64,
+            id=(ip_id + i) & 0xffff
+        )
+        /
+        ICMP(
+            type=8,
+            code=0,
+            id=icmp_id,
+            seq=i + 1
+        )
+        /
+        Raw(load=payload)
+    )
+
+    send(
+        paquete,
+        verbose=False
+    )
+
+    print(
+        f"Enviado {i + 1}/{len(mensaje)} "
+        f"seq={i + 1}"
+    )
+
+    time.sleep(1)
 
 print("Envío terminado.")

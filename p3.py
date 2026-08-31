@@ -1,15 +1,38 @@
 from scapy.all import rdpcap, IP, ICMP, Raw
 from colorama import Fore, Style, init
+import argparse
 import re
 
 init(autoreset=True)
 
-archivo = input("Archivo .pcap: ")
-IP_DESTINO = "8.8.8.8"
+
+# ---------------------------------
+# Argumentos por terminal
+# ---------------------------------
+parser = argparse.ArgumentParser(
+    description="Extraer y descifrar mensaje desde tráfico ICMP"
+)
+
+parser.add_argument(
+    "archivo",
+    help="Archivo PCAP a analizar"
+)
+
+parser.add_argument(
+    "ip_destino",
+    help="IP destino de los paquetes ICMP"
+)
+
+args = parser.parse_args()
+
+archivo = args.archivo
+IP_DESTINO = args.ip_destino
+
 
 paquetes = rdpcap(archivo)
 
 mensaje = ""
+
 
 # ---------------------------------
 # Extraer mensaje del PCAP
@@ -25,16 +48,26 @@ for paquete in paquetes:
     ):
         data = bytes(paquete[Raw].load)
 
-        if len(data) >= 1:
+        # Estructura del payload:
+        #
+        # Bytes 0-7   = Timestamp
+        # Byte 8      = carácter cifrado
+        # Bytes 9-10  = resto de microsegundos
+        # Bytes 11-15 = 5 bytes 0x00
+        # Bytes 16-55 = 0x10 ... 0x37
+
+        if len(data) >= 9:
             try:
-                caracter = data[:1].decode("ascii")
+                caracter = data[8:9].decode("ascii")
                 mensaje += caracter
+
             except UnicodeDecodeError:
                 pass
 
 
 print("\nMensaje cifrado:")
 print(mensaje)
+
 
 # ---------------------------------
 # César
@@ -74,6 +107,7 @@ palabras = [
     "esta", "muy", "y", "o", "a"
 ]
 
+
 def puntuar(texto):
     texto_lower = texto.lower()
 
@@ -85,6 +119,7 @@ def puntuar(texto):
             r'\b' + re.escape(palabra) + r'\b',
             texto_lower
         )
+
         puntuacion += len(coincidencias) * 5
 
     # Favorecer espacios
@@ -109,17 +144,31 @@ def puntuar(texto):
 resultados = []
 
 for corrimiento in range(26):
-    texto = cesar_descifrar(mensaje, corrimiento)
+
+    texto = cesar_descifrar(
+        mensaje,
+        corrimiento
+    )
+
     puntuacion = puntuar(texto)
 
     resultados.append(
-        (puntuacion, corrimiento, texto)
+        (
+            puntuacion,
+            corrimiento,
+            texto
+        )
     )
 
-# Ordenar de mayor a menor puntuación
+
+# ---------------------------------
+# Ordenar resultados
+# ---------------------------------
+
 resultados.sort(reverse=True)
 
 mejor_puntuacion = resultados[0][0]
+
 
 print("\nPosibles mensajes:")
 print("=" * 70)
@@ -127,17 +176,21 @@ print("=" * 70)
 for puntuacion, corrimiento, texto in resultados:
 
     if puntuacion == mejor_puntuacion:
+
         print(
             Fore.GREEN
             + f"> Corrimiento {corrimiento:2d}: {texto}"
             + f"  [PUNTUACIÓN: {puntuacion}]"
             + Style.RESET_ALL
         )
+
     else:
+
         print(
             f"  Corrimiento {corrimiento:2d}: {texto}"
             f"  [PUNTUACIÓN: {puntuacion}]"
         )
+
 
 print("=" * 70)
 
@@ -146,4 +199,7 @@ print(
     + f"\nMensaje más probable: {resultados[0][2]}"
     + Style.RESET_ALL
 )
-print(f"{resultados[0][1]}")
+
+print(
+    f"Corrimiento: {resultados[0][1]}"
+)
