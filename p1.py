@@ -1,3 +1,6 @@
+import argparse
+
+
 def cifrado_cesar(texto, corrimiento):
     resultado = ""
 
@@ -19,11 +22,22 @@ def cifrado_cesar(texto, corrimiento):
     return resultado
 
 
-# Parámetros de entrada
-texto = input("Ingrese el texto a cifrar: ")
-corrimiento = int(input("Ingrese el corrimiento: "))
+parser = argparse.ArgumentParser(description="Cifrado César")
 
-# Cifrar el texto
-texto_cifrado = cifrado_cesar(texto, corrimiento)
+parser.add_argument(
+    "texto",
+    type=str,
+    help="Texto que se desea cifrar"
+)
+
+parser.add_argument(
+    "corrimiento",
+    type=int,
+    help="Cantidad de posiciones que se desplazará el texto"
+)
+
+args = parser.parse_args()
+
+texto_cifrado = cifrado_cesar(args.texto, args.corrimiento)
 
 print("Texto cifrado:", texto_cifrado)
